@@ -21,3 +21,12 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include("My_app.urls")),
 ]
+
+from django.http import JsonResponse
+
+def home(request):
+    return JsonResponse({"message": "API is working 🚀"})
+
+urlpatterns = [
+    path('', home),
+]
