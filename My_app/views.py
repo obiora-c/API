@@ -1,16 +1,16 @@
-from django.shortcuts import render
-
-# Create your views here.
-import requests 
+import requests
 from datetime import datetime, timezone
 from django.http import JsonResponse
 
 
 def classify_name(request):
+    # -------------------------
+    # GET PARAM
+    # -------------------------
     name = request.GET.get("name")
 
     # -------------------------
-    # ERROR: missing name
+    # ERROR: missing or empty
     # -------------------------
     if name is None or name.strip() == "":
         return JsonResponse(
@@ -19,7 +19,7 @@ def classify_name(request):
         )
 
     # -------------------------
-    # ERROR: invalid type
+    # VALIDATION: must be string
     # -------------------------
     if not isinstance(name, str):
         return JsonResponse(
@@ -27,35 +27,32 @@ def classify_name(request):
             status=422
         )
 
+    name = name.strip().lower()
+
     # -------------------------
-    # Call Genderize API
+    # CALL EXTERNAL API
     # -------------------------
     try:
-        response = requests.get(
+        res = requests.get(
             "https://api.genderize.io",
             params={"name": name},
-            timeout=3
+            timeout=5
         )
+        res.raise_for_status()
     except requests.RequestException:
         return JsonResponse(
             {"status": "error", "message": "Upstream service failure"},
             status=502
         )
 
-    if response.status_code != 200:
-        return JsonResponse(
-            {"status": "error", "message": "External API error"},
-            status=502
-        )
-
-    data = response.json()
+    data = res.json()
 
     gender = data.get("gender")
     probability = data.get("probability")
     count = data.get("count")
 
     # -------------------------
-    # EDGE CASE: no prediction
+    # EDGE CASE
     # -------------------------
     if gender is None or count == 0:
         return JsonResponse(
@@ -64,14 +61,18 @@ def classify_name(request):
         )
 
     # -------------------------
-    # Processing rules
+    # PROCESSING
     # -------------------------
-    sample_size = count
-    probability = float(probability or 0)
+    probability = float(probability)
+    sample_size = int(count)
 
     is_confident = probability >= 0.7 and sample_size >= 100
 
-    processed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    processed_at = (
+        datetime.now(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
     # -------------------------
     # SUCCESS RESPONSE
@@ -79,7 +80,7 @@ def classify_name(request):
     return JsonResponse({
         "status": "success",
         "data": {
-            "name": name.lower(),
+            "name": name,
             "gender": gender,
             "probability": probability,
             "sample_size": sample_size,
